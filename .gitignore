@@ -1,0 +1,12 @@
+# PyInstaller build files
+build/
+dist/
+*.spec
+build.bat
+
+# Local application configurations
+settings.ini
+
+# Python cache
+__pycache__/
+*.pyc
