@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # PyInstaller build files
 build/
 dist/
@@ -9,4 +10,17 @@ settings.ini
 
 # Python cache
 __pycache__/
+=======
+# PyInstaller build files
+build/
+dist/
+*.spec
+build.bat
+
+# Local application configurations
+settings.ini
+
+# Python cache
+__pycache__/
+>>>>>>> a32ebf981e697a54b39572d0f1d4137e6ff8346b
 *.pyc
