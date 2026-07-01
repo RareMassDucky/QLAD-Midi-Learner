@@ -118,10 +118,13 @@ def extract_notes_by_time(midi_file_path):
             if last_tick != -1 and event['tick'] > last_tick + (ticks_per_beat / 8):
                 if current_step:
                     steps.append(list(current_step))
-                    current_step = set()
+                current_step = set()
             current_step.add(event['note'])
             last_tick = event['tick']
            
+        elif event['type'] == 'off':
+            pass
+            
     if current_step:
         steps.append(list(current_step))
        
@@ -370,6 +373,7 @@ class MidiLearnerGUI:
        
         self.active_targets = set()
         self.active_pressed = set()
+        self.step_new_presses = set()
         self.visualizer_window = None
         self.roblox_window_instance = None
 
@@ -700,7 +704,7 @@ class MidiLearnerGUI:
         self.weight_label.config(bg=bg_drawer, fg=fg_main)
         self.delay_label.config(bg=bg_drawer, fg=fg_main)
         self.colors_frame.config(bg=bg_drawer, fg=fg_main)
-        
+
         self.top_check.config(bg=bg_drawer, fg=fg_main, activebackground=bg_drawer, activeforeground=fg_main, selectcolor=chk_select)
         self.viz_top_check.config(bg=bg_drawer, fg=fg_main, activebackground=bg_drawer, activeforeground=fg_main, selectcolor=chk_select)
         
@@ -856,6 +860,7 @@ class MidiLearnerGUI:
                         for msg in self.inport.iter_pending():
                             if msg.type == 'note_on' and msg.velocity > 0:
                                 pressed_notes.add(msg.note)
+                                self.step_new_presses.add(msg.note)
                                 
                                 self.send_roblox_midi_keystroke(True, msg.note, msg.velocity)
                                 
@@ -865,7 +870,7 @@ class MidiLearnerGUI:
                                     base_velocity = max(1, min(127, base_velocity))
                                 else:
                                     base_velocity = msg.velocity
-                                    
+                                   
                                 if self.enable_audio.get() and self.hMidiOut:
                                     vol_percent = self.volume_level.get()
                                     vol_scale = vol_percent / 100.0
@@ -895,7 +900,7 @@ class MidiLearnerGUI:
                                     midi_msg = 0xB0 | (msg.control << 8) | (msg.value << 16)
                                     fire_at = time.time() + (self.delay_level.get() / 1000.0)
                                     self.audio_queue.put((fire_at, midi_msg))
-                                    
+                                     
                     except Exception:
                         pass
             
@@ -912,6 +917,7 @@ class MidiLearnerGUI:
         self.is_running = True
         self.stop_playback.clear()
         self.skip_step.clear()
+        self.step_new_presses.clear()
         self.status_label.config(text="Status: Playing...")
         
         self.playback_thread = threading.Thread(target=self.playback_worker, daemon=True)
@@ -932,14 +938,22 @@ class MidiLearnerGUI:
                     if self.outport:
                         for note in notes_to_play:
                             self.outport.send(mido.Message('note_on', note=note, velocity=1, channel=0))
-                            
+                           
             self.root.after(0, lambda i=idx: self.progress_label.config(text=f"Step: {i+1} / {len(self.steps)}"))
             self.skip_step.clear()
             
-            while not set(notes_to_play).issubset(self.active_pressed):
+            while True:
                 if self.stop_playback.is_set() or self.skip_step.is_set():
                     break
+                
+                # Must be holding the notes AND they must have been newly struck for this current step
+                if set(notes_to_play).issubset(self.active_pressed) and set(notes_to_play).issubset(self.step_new_presses):
+                    break
                 time.sleep(0.01)
+                
+            # Consume the notes that were just used so they can't be reused automatically by holding them
+            for note in notes_to_play:
+                self.step_new_presses.discard(note)
                 
             if self.enable_hw_lights.get():
                 with self.midi_lock:
@@ -963,6 +977,7 @@ class MidiLearnerGUI:
         self.skip_step.set()
         self.current_step_idx = 0
         self.active_targets.clear()
+        self.step_new_presses.clear()
         self.status_label.config(text="Status: Ready")
         if self.steps:
             self.progress_label.config(text=f"Step: 0 / {len(self.steps)}")
